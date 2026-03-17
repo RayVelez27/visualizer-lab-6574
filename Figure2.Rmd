@@ -1,0 +1,487 @@
+---
+title: "Figure 2A-D. Maternal nutritional intervention causally influences infant growth via milk composition"
+---
+
+```{r setup, include=FALSE}
+# Show code if file is knit 
+knitr::opts_chunk$set(echo = TRUE)
+
+# Sets working directory to file location
+library(rstudioapi)
+if (interactive() && rstudioapi::isAvailable()) { 
+  rootdir = dirname(rstudioapi::getSourceEditorContext()$path) 
+  setwd(dirname(rstudioapi::getSourceEditorContext()$path)) 
+}
+```
+
+# Load data, libraries, functions
+``` {r}
+# Load libraries and data 
+source("plotting_setup.R")
+# Load functions
+source("plotting_functions.R")
+```
+
+# Figure 2
+
+## Figure 2A
+
+``` {r}
+# Load MISAME growth trajectory data
+misame_growth_df2 = read.csv("C://Users/ETTINA03/NYU Langone Health Dropbox/April Jauhal/Shenhav_Lab/IMiC/Data/MISAME/metadata/misame_processed_traj_growth.csv", row.names = 1)
+weight_diff_df <- left_join(misame_metadata, inner_join(
+  misame_metadata %>% filter(VISIT=="Delivery", is.na(VISIT_R_FL)) %>% dplyr::select(SUBJID, WTKG) %>% dplyr::rename(wt_0=WTKG),
+  misame_metadata %>% filter(VISIT=="Post Natal FU M06", is.na(VISIT_R_FL)) %>% dplyr::select(SUBJID, WTKG, AGEDAYS) %>% dplyr::rename(wt_6=WTKG, AGE=AGEDAYS))) %>%
+    mutate(delta_weight_6mo = wt_6-wt_0,
+           growth_vel_6mo=(1000*log(wt_6/wt_0))/AGE) # Patel exponential method
+length_diff_df <- left_join(misame_metadata, inner_join(
+  misame_metadata %>% filter(VISIT=="Delivery", is.na(VISIT_R_FL)) %>% dplyr::select(SUBJID, LENCM) %>% dplyr::rename(len_0=LENCM),
+  misame_metadata %>% filter(VISIT=="Post Natal FU M06", is.na(VISIT_R_FL)) %>% dplyr::select(SUBJID, LENCM, AGEDAYS) %>% dplyr::rename(len_6=LENCM, AGE=AGEDAYS))) %>%
+    mutate(delta_length_6mo = len_6-len_0,   
+           length_vel_6mo=delta_length_6mo/(AGE/30.437))
+
+# Trajectory plot
+Fig2A_p1 <- ggplot(misame_growth_df2, aes(x=Month, y=WAZ, color=WAZ_traj_cat, group=as.factor(SUBJIDO))) + geom_line(show.legend = FALSE) + facet_grid( . ~ WAZ_traj_cat ) + ylim(c(-5.5, 2.5)) + 
+  theme_bw() +  # Base black-and-white theme
+  theme(
+    #plot.title = element_text(hjust = 0.5, face = "bold"),                # Center and bold title
+    strip.text = element_text(size = 14),                                  # Facet strip text size
+    strip.background = element_rect(colour = "black", fill = "white"),     # Facet strip background
+    panel.grid.major = element_blank(),                                    # Remove major grid lines
+    panel.grid.minor = element_blank(),                                    # Remove minor grid lines
+    text = element_text(size = 20),                                        # General text size
+    axis.text = element_text(color = "black", size = 14),                  # Axis text customization
+    legend.key.size = unit(0.5, "cm")                                      # Legend key size
+  ) + xlab("Month of Life") + ylab("Weight for Age Z-score")
+
+# Adding text to trajectory plot
+Mis_BEP_key = misame_growth_df2 %>% dplyr::select(SUBJID, WAZ_traj_cat, ARMCD) %>% unique() %>% group_by(WAZ_traj_cat) %>% 
+  dplyr::summarize(Prenatal_BEP=signif(100*sum(ARMCD %in% c(3,4))/n(), 2),
+                   Postnatal_BEP=signif(100*sum(ARMCD %in% c(2,4))/n(), 2),
+                   Any_BEP=signif(100*sum(ARMCD %in% c(2,3,4))/n(), 2))
+Fig2A_p1.1 = Fig2A_p1 + geom_text(data = Mis_BEP_key, aes(x=0, y=2.9, label = paste0("Any BEP: ", Any_BEP, "%")), inherit.aes = FALSE, hjust=0, size = 5) +
+  ylim(-5, 2.9)
+
+# Boxplots
+Fig2A_p3.2 <- ggarrange(
+  ggplot(misame_growth_df2 %>% filter(VISIT=="Delivery"),
+         aes(x=WAZ_traj_cat, y=BMI, fill=WAZ_traj_cat)) + geom_boxplot() + stat_compare_means(comparisons = list(c("TRUE", "FALSE"))) + 
+   theme_bw() +  # Base black-and-white theme
+    theme(
+      #plot.title = element_text(hjust = 0.5, face = "bold"),                 # Center and bold title
+      strip.text = element_text(size = 14),                                # Facet strip text size
+      strip.background = element_rect(colour = "black", fill = "white"),     # Facet strip background
+      panel.grid.major = element_blank(),                                    # Remove major grid lines
+      panel.grid.minor = element_blank(),                                    # Remove minor grid lines
+      text = element_text(size = 12),                                        # General text size
+      axis.text = element_text(color = "black", size = 10),                  # Axis text customization
+      legend.key.size = unit(0.5, "cm"),                                      # Legend key size
+            axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "None"
+    ) +
+    xlab("WAZ Trajectory") + ylab("Delivery BMI") +
+  stat_compare_means(comparisons = list(c("Recovered", "Unrecovered"), c("Recovered", "Stable4")),
+                                                                                      aes(label = ..p.signif..)) + ylim(8, 17.5),
+  ggplot(addWGSR(misame_growth_df2, sex= "SEXN", firstPart = "HCIRCM", secondPart = "AGEDAYS", index = "hca") %>% filter(VISIT=="Delivery"),
+         aes(x=WAZ_traj_cat, y=hcaz, fill=WAZ_traj_cat)) + geom_boxplot() + stat_compare_means(comparisons = list(c("TRUE", "FALSE"))) + 
+   theme_bw() +  # Base black-and-white theme
+    theme(
+      #plot.title = element_text(hjust = 0.5, face = "bold"),                 # Center and bold title
+      strip.text = element_text(size = 14),                                # Facet strip text size
+      strip.background = element_rect(colour = "black", fill = "white"),     # Facet strip background
+      panel.grid.major = element_blank(),                                    # Remove major grid lines
+      panel.grid.minor = element_blank(),                                    # Remove minor grid lines
+      text = element_text(size = 12),                                        # General text size
+      axis.text = element_text(color = "black", size = 10),                  # Axis text customization
+      legend.key.size = unit(0.5, "cm"),                                      # Legend key size
+            axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "None"
+    ) +
+    xlab("WAZ Trajectory") + ylab("Delivery Head Circumference") +
+  stat_compare_means(comparisons = list(c("Recovered", "Unrecovered"), c("Recovered", "Stable4")),
+                                                                                      aes(label = ..p.signif..)) + ylim(-5, 4.5),
+  ggplot(misame_growth_df2 %>% left_join(weight_diff_df) %>% filter(VISIT=="Delivery") %>% mutate(prenatal_BEP=ARMCD %in% c(3,4), postnatal_BEP=ARMCD %in% c(2,4)),
+         aes(x=WAZ_traj_cat, y=growth_vel_6mo, fill=WAZ_traj_cat)) + geom_boxplot() +
+     theme_bw() +  # Base black-and-white theme
+    theme(
+      #plot.title = element_text(hjust = 0.5, face = "bold"),                 # Center and bold title
+      strip.text = element_text(size = 14),                                # Facet strip text size
+      strip.background = element_rect(colour = "black", fill = "white"),     # Facet strip background
+      panel.grid.major = element_blank(),                                    # Remove major grid lines
+      panel.grid.minor = element_blank(),                                    # Remove minor grid lines
+      text = element_text(size = 12),                                        # General text size
+      axis.text = element_text(color = "black", size = 10),                  # Axis text customization
+      legend.key.size = unit(0.5, "cm"),                                      # Legend key size
+            axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "None"
+    ) + xlab("WAZ Trajectory") + ylab("Growth Velocity (g/kg/day)") + 
+    stat_compare_means(comparisons = list(c("Recovered", "Unrecovered"), c("Recovered", "Stable4")),
+                       aes(label = ..p.signif..)) + ylim(0, 10),
+  ggplot(misame_growth_df2 %>% filter(VISIT=="Post Natal FU M06"),
+         aes(x=WAZ_traj_cat, y=BMI, fill=WAZ_traj_cat)) + geom_boxplot() + stat_compare_means(comparisons = list(c("TRUE", "FALSE"))) + 
+   theme_bw() +  # Base black-and-white theme
+    theme(
+      #plot.title = element_text(hjust = 0.5, face = "bold"),                 # Center and bold title
+      strip.text = element_text(size = 14),                                # Facet strip text size
+      strip.background = element_rect(colour = "black", fill = "white"),     # Facet strip background
+      panel.grid.major = element_blank(),                                    # Remove major grid lines
+      panel.grid.minor = element_blank(),                                    # Remove minor grid lines
+      text = element_text(size = 12),                                        # General text size
+      axis.text = element_text(color = "black", size = 10),                  # Axis text customization
+      legend.key.size = unit(0.5, "cm"),                                      # Legend key size
+            axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "None"
+    ) +
+    xlab("WAZ Trajectory") + ylab("Month 6 BMI") +
+  stat_compare_means(comparisons = list(c("Recovered", "Unrecovered"), c("Recovered", "Stable4")),
+                                                                                      aes(label = ..p.signif..)) + ylim(12.5, 27),
+  ggplot(addWGSR(misame_growth_df2, sex= "SEXN", firstPart = "HCIRCM", secondPart = "AGEDAYS", index = "hca") %>% filter(VISIT=="Post Natal FU M06"),
+         aes(x=WAZ_traj_cat, y=hcaz, fill=WAZ_traj_cat)) + geom_boxplot() + stat_compare_means(comparisons = list(c("TRUE", "FALSE"))) + 
+   theme_bw() +  # Base black-and-white theme
+    theme(
+      #plot.title = element_text(hjust = 0.5, face = "bold"),                 # Center and bold title
+      strip.text = element_text(size = 14),                                # Facet strip text size
+      strip.background = element_rect(colour = "black", fill = "white"),     # Facet strip background
+      panel.grid.major = element_blank(),                                    # Remove major grid lines
+      panel.grid.minor = element_blank(),                                    # Remove minor grid lines
+      text = element_text(size = 12),                                        # General text size
+      axis.text = element_text(color = "black", size = 10),                  # Axis text customization
+      legend.key.size = unit(0.5, "cm"),                                      # Legend key size
+            axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "None"
+    ) +
+    xlab("WAZ Trajectory") + ylab("Month 6 Head Circumference") +
+  stat_compare_means(comparisons = list(c("Recovered", "Unrecovered"), c("Recovered", "Stable4")),
+                                                                                      aes(label = ..p.signif..)) + ylim(-5, 4.5),
+ggplot(misame_growth_df2 %>% left_join(length_diff_df) %>% filter(VISIT=="Delivery") %>% mutate(prenatal_BEP=ARMCD %in% c(3,4), postnatal_BEP=ARMCD %in% c(2,4)),
+         aes(x=WAZ_traj_cat, y=length_vel_6mo, fill=WAZ_traj_cat)) + geom_boxplot() +
+     theme_bw() +  # Base black-and-white theme
+    theme(
+      #plot.title = element_text(hjust = 0.5, face = "bold"),                 # Center and bold title
+      strip.text = element_text(size = 14),                                # Facet strip text size
+      strip.background = element_rect(colour = "black", fill = "white"),     # Facet strip background
+      panel.grid.major = element_blank(),                                    # Remove major grid lines
+      panel.grid.minor = element_blank(),                                    # Remove minor grid lines
+      text = element_text(size = 12),                                        # General text size
+      axis.text = element_text(color = "black", size = 10),                  # Axis text customization
+      legend.key.size = unit(0.5, "cm"),                                      # Legend key size
+            axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "None"
+    ) + xlab("WAZ Trajectory") + ylab("Length Velocity (cm/month)") + stat_compare_means(comparisons = list(c("Recovered", "Unrecovered"), c("Recovered", "Stable4")),
+                                                                                      aes(label = ..p.signif..)) + ylim(1.5, 4.2),
+  ncol=3, nrow=2)
+
+Figure2A = ggarrange(Fig2A_p1.1, Fig2A_p3.2, ncol=2, widths = c(1.5, 1))
+Figure2A
+
+ggexport(filename = paste0(fig_path, "/Figure2A.pdf"), 
+       plot = Figure2A,
+       width = 16, height = 8)   
+```
+
+## Figure 2B
+``` {r}
+# Load Vital Trajectory Data
+growth_df2_vit = read.csv("C://Users/ETTINA03/NYU Langone Health Dropbox/April Jauhal/Shenhav_Lab/IMiC/Data/VITAL/metadata/vital_processed_traj_growth.csv", row.names = 1)
+
+vital_weight_diff_6mo_df <- left_join(vital_metadata, inner_join(
+  vital_metadata %>% filter(VISIT=="Baseline", is.na(VISIT_R_FL)) %>% dplyr::select(SUBJID, WTKG) %>% dplyr::rename(wt_0=WTKG),
+  vital_metadata %>% filter(VISIT=="Follow up month 6", is.na(VISIT_R_FL)) %>% dplyr::select(SUBJID, WTKG, AGEDAYS) %>% dplyr::rename(wt_6=WTKG, AGE=AGEDAYS))) %>%
+    mutate(delta_weight_6mo = wt_6-wt_0,
+           growth_vel_6mo=(1000*log(wt_6/wt_0))/AGE) # Patel exponential method
+
+vital_length_diff_6mo_df <- left_join(vital_metadata, inner_join(
+  vital_metadata %>% filter(VISIT=="Baseline", is.na(VISIT_R_FL)) %>% dplyr::select(SUBJID, LENCM) %>% dplyr::rename(len_0=LENCM),
+  vital_metadata %>% filter(VISIT=="Follow up month 6", is.na(VISIT_R_FL)) %>% dplyr::select(SUBJID, LENCM, AGEDAYS) %>% dplyr::rename(len_6=LENCM, AGE=AGEDAYS))) %>%
+    mutate(delta_length_6mo = len_6-len_0,   
+           length_vel_6mo=delta_length_6mo/(AGE/30.437))
+
+# Building trajectory plot
+Fig2B_p1 <- ggplot(growth_df2_vit, aes(x=Month, y=WAZ, color=WAZ_traj_cat, group=as.factor(SUBJIDO))) + geom_line(show.legend = FALSE) + facet_grid( . ~ WAZ_traj_cat ) + ylim(c(-5.5, 2.5)) + 
+  theme_bw() +  # Base black-and-white theme
+  theme(
+    #plot.title = element_text(hjust = 0.5, face = "bold"),                 # Center and bold title
+    strip.text = element_text(size = 14),                                # Facet strip text size
+    strip.background = element_rect(colour = "black", fill = "white"),     # Facet strip background
+    panel.grid.major = element_blank(),                                    # Remove major grid lines
+    panel.grid.minor = element_blank(),                                    # Remove minor grid lines
+    text = element_text(size = 20),                                        # General text size
+    axis.text = element_text(color = "black", size = 14),                  # Axis text customization
+    legend.key.size = unit(0.5, "cm")                                      # Legend key size
+  ) + xlab("Month of Life") + ylab("Weight for Age Z-score")
+
+Vit_BEP_key = growth_df2_vit %>% dplyr::select(SUBJID, WAZ_traj_cat, ARMCD) %>% unique() %>% group_by(WAZ_traj_cat) %>% 
+  dplyr::summarize(BEP=signif(100*sum(ARMCD %in% c(2,3))/n(), 2))
+
+# Adding text to trajectory plot
+Fig2B_p1.1 = Fig2B_p1 + geom_text(data = Vit_BEP_key, aes(x=0, y=2.2, label = paste0("BEP: ", BEP, "%")), inherit.aes = FALSE, hjust=0, size = 5) + ylim(-5, 2.2)
+
+# Boxplots
+Fig2B_p3.1 <- ggarrange(
+  ggplot(growth_df2_vit %>% dplyr::rename(SubjectID = SUBJIDO) %>% filter(VISIT=="Baseline"),
+         aes(x=WAZ_traj_cat, y=BMI, fill=WAZ_traj_cat)) + geom_boxplot() + stat_compare_means(comparisons = list(c("TRUE", "FALSE"))) + 
+   theme_bw() +  # Base black-and-white theme
+    theme(
+      #plot.title = element_text(hjust = 0.5, face = "bold"),                 # Center and bold title
+      strip.text = element_text(size = 14),                                # Facet strip text size
+      strip.background = element_rect(colour = "black", fill = "white"),     # Facet strip background
+      panel.grid.major = element_blank(),                                    # Remove major grid lines
+      panel.grid.minor = element_blank(),                                    # Remove minor grid lines
+      text = element_text(size = 12),                                        # General text size
+      axis.text = element_text(color = "black", size = 10),                  # Axis text customization
+      legend.key.size = unit(0.5, "cm"),                                      # Legend key size
+            axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "None"
+    ) +
+    xlab("WAZ Trajectory") + ylab("BMI at Delivery") +
+  stat_compare_means(comparisons = list(c("Perturbed", "Stable4")),
+                     aes(label = ..p.signif..)) + ylim(9, 16),
+  ggplot(growth_df2_vit %>% dplyr::rename(SubjectID = SUBJIDO) %>% filter(VISIT=="Baseline"),
+         aes(x=WAZ_traj_cat, y=HCAZ, fill=WAZ_traj_cat)) + geom_boxplot() + stat_compare_means(comparisons = list(c("TRUE", "FALSE"))) + 
+   theme_bw() +  # Base black-and-white theme
+    theme(
+      #plot.title = element_text(hjust = 0.5, face = "bold"),                 # Center and bold title
+      strip.text = element_text(size = 14),                                # Facet strip text size
+      strip.background = element_rect(colour = "black", fill = "white"),     # Facet strip background
+      panel.grid.major = element_blank(),                                    # Remove major grid lines
+      panel.grid.minor = element_blank(),                                    # Remove minor grid lines
+      text = element_text(size = 12),                                        # General text size
+      axis.text = element_text(color = "black", size = 10),                  # Axis text customization
+      legend.key.size = unit(0.5, "cm"),                                      # Legend key size
+            axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "None"
+    ) +
+    xlab("WAZ Trajectory") + ylab("HCAZ at Delivery") +
+  stat_compare_means(comparisons = list(c("Perturbed", "Stable4")),
+                     aes(label = ..p.signif..)) + ylim(-4.2, 1.4),
+  ggplot(growth_df2_vit %>% dplyr::rename(SubjectID = SUBJIDO) %>% left_join(vital_weight_diff_6mo_df) %>% unique() %>% filter(VISIT=="Baseline") %>% mutate(prenatal_BEP=ARMCD %in% c(3,4), postnatal_BEP=ARMCD %in% c(2,4)),
+         aes(x=WAZ_traj_cat, y=growth_vel_6mo, fill=WAZ_traj_cat)) + geom_boxplot() +
+     theme_bw() +  # Base black-and-white theme
+    theme(
+      #plot.title = element_text(hjust = 0.5, face = "bold"),                 # Center and bold title
+      strip.text = element_text(size = 14),                                # Facet strip text size
+      strip.background = element_rect(colour = "black", fill = "white"),     # Facet strip background
+      panel.grid.major = element_blank(),                                    # Remove major grid lines
+      panel.grid.minor = element_blank(),                                    # Remove minor grid lines
+      text = element_text(size = 12),                                        # General text size
+      axis.text = element_text(color = "black", size = 10),                  # Axis text customization
+      legend.key.size = unit(0.5, "cm"),                                      # Legend key size
+            axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "None"
+    ) + xlab("WAZ Trajectory") + ylab("Growth Velocity (g/kg/day)") + 
+    stat_compare_means(comparisons = list(c("Perturbed", "Stable4")),
+                       aes(label = ..p.signif..)) + ylim(2, 8),
+  ggplot(growth_df2_vit %>% dplyr::rename(SubjectID = SUBJIDO) %>% filter(VISIT=="Follow up month 6"),
+         aes(x=WAZ_traj_cat, y=BMI, fill=WAZ_traj_cat)) + geom_boxplot() + stat_compare_means(comparisons = list(c("TRUE", "FALSE"))) + 
+   theme_bw() +  # Base black-and-white theme
+    theme(
+      #plot.title = element_text(hjust = 0.5, face = "bold"),                 # Center and bold title
+      strip.text = element_text(size = 14),                                # Facet strip text size
+      strip.background = element_rect(colour = "black", fill = "white"),     # Facet strip background
+      panel.grid.major = element_blank(),                                    # Remove major grid lines
+      panel.grid.minor = element_blank(),                                    # Remove minor grid lines
+      text = element_text(size = 12),                                        # General text size
+      axis.text = element_text(color = "black", size = 10),                  # Axis text customization
+      legend.key.size = unit(0.5, "cm"),                                      # Legend key size
+            axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "None"
+    ) +
+    xlab("WAZ Trajectory") + ylab("Month 6 BMI") +
+  stat_compare_means(comparisons = list(c("Perturbed", "Stable4")),
+                     aes(label = ..p.signif..)) + ylim(12, 22),
+  ggplot(growth_df2_vit %>% dplyr::rename(SubjectID = SUBJIDO) %>% filter(VISIT=="Follow up month 6"),
+         aes(x=WAZ_traj_cat, y=HCAZ, fill=WAZ_traj_cat)) + geom_boxplot() + stat_compare_means(comparisons = list(c("TRUE", "FALSE"))) + 
+   theme_bw() +  # Base black-and-white theme
+    theme(
+      #plot.title = element_text(hjust = 0.5, face = "bold"),                 # Center and bold title
+      strip.text = element_text(size = 14),                                # Facet strip text size
+      strip.background = element_rect(colour = "black", fill = "white"),     # Facet strip background
+      panel.grid.major = element_blank(),                                    # Remove major grid lines
+      panel.grid.minor = element_blank(),                                    # Remove minor grid lines
+      text = element_text(size = 12),                                        # General text size
+      axis.text = element_text(color = "black", size = 10),                  # Axis text customization
+      legend.key.size = unit(0.5, "cm"),                                      # Legend key size
+            axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "None"
+    ) +
+    xlab("WAZ Trajectory") + ylab("Month 6 HCAZ") +
+  stat_compare_means(comparisons = list(c("Perturbed", "Stable4")),
+                     aes(label = ..p.signif..)) + ylim(-4,2.2),
+  ggplot(growth_df2_vit %>% dplyr::rename(SubjectID = SUBJIDO)  %>% left_join(vital_length_diff_6mo_df) %>% filter(VISIT=="Baseline") %>% mutate(prenatal_BEP=ARMCD %in% c(3,4), postnatal_BEP=ARMCD %in% c(2,4)),
+         aes(x=WAZ_traj_cat, y=length_vel_6mo, fill=WAZ_traj_cat)) + geom_boxplot() +
+     theme_bw() +  # Base black-and-white theme
+    theme(
+      #plot.title = element_text(hjust = 0.5, face = "bold"),                 # Center and bold title
+      strip.text = element_text(size = 14),                                # Facet strip text size
+      strip.background = element_rect(colour = "black", fill = "white"),     # Facet strip background
+      panel.grid.major = element_blank(),                                    # Remove major grid lines
+      panel.grid.minor = element_blank(),                                    # Remove minor grid lines
+      text = element_text(size = 12),                                        # General text size
+      axis.text = element_text(color = "black", size = 10),                  # Axis text customization
+      legend.key.size = unit(0.5, "cm"),                                      # Legend key size
+            axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "None"
+    ) + xlab("WAZ Trajectory") + ylab("Length Velocity (cm/month)") + stat_compare_means(comparisons = list(c("Perturbed", "Stable4")),
+                                                                                      aes(label = ..p.signif..)) + ylim(1.5, 4.2),
+  ncol=3, nrow=2)
+
+Figure2B = ggarrange(Fig2B_p1.1, Fig2B_p3.1, ncol=2, widths = c(1.5, 1))
+Figure2B
+ggsave(filename = paste0(fig_path, "/Figure2B.pdf"), 
+       plot = Figure2B, width = 16, height = 8)
+```
+
+## Figure 2C 
+``` {r}
+misame_df = misame_full_meta %>% dplyr::select(-SampleID, -VISIT, -Timepoint, -AGEDAYS) %>% unique() %>% filter(SubjectID!=1828) # Subject excluded due to unrealistic WAZ values
+misame_df_35_vs_all = misame_df %>% mutate(group35vsall=WAZ_traj %in% c(3,5))
+misame_df_3vs5 = misame_df %>% filter(WAZ_traj %in% c(3, 5)) %>% 
+  mutate(group3=WAZ_traj==3,
+         Prenatal_BEP=ARMCD %in% c(3, 4))
+
+# Calculate growth perturbation risk factors dataframe
+Misame_35_risk = rbind(
+  get_risk_scores(misame_df_35_vs_all, "group35vsall", "Premature", "Prematurity"),
+  get_risk_scores(misame_df_35_vs_all, "group35vsall", "Low_birth_weight", "Low birth weight"),
+  get_risk_scores(misame_df_35_vs_all, "group35vsall", "Summer", "Summer delivery"),
+  get_risk_scores(misame_df_35_vs_all, "group35vsall", "MHTCM_binary_bins", "MHTCM<155cm"),
+  get_risk_scores(misame_df_35_vs_all %>% mutate(Outcome = MMUACCM_Enroll<23), "group35vsall", "Outcome", "MMUAC<23cm\n(Enrollment)")) %>%
+  mutate(Condition = "Growth perturbation", Study = "Misame",
+    Size = factor(case_when(
+      Chisq.P < 0.001 ~ "p<0.001",   # Strongest significance
+      Chisq.P < 0.01  ~ "p<0.01",   # Moderate significance
+      Chisq.P < 0.05  ~ "p<0.05",   # Weak significance
+      TRUE      ~ "ns"), levels= c("ns", "p<0.05", "p<0.01", "p<0.001")))
+
+# Generate growth perturbation risk factors plot
+riskplotM1 = ggplot(Misame_35_risk, aes(x = Risk_ratio, y = Outcome,
+                                       size = Size)) +
+  ggstance::geom_pointrangeh(aes(xmin = CI_lower, xmax = CI_upper), color = "#EE4B2B", fatten = 3) +
+  geom_vline(xintercept = 1, linetype = "dashed") +
+  scale_size_manual(values = c('ns' = 0.2, 'p<0.05'=0.4, 'p<0.01'=0.6,
+                               'p<0.001'=0.8)) +
+  labs(x = "Risk Ratio", y = NULL) +
+  ggtitle("MISAME Growth Perturbation\nRisk Factors") +
+  theme_bw(base_size = 13) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        strip.background = element_rect(fill = "grey85"),
+        legend.title = element_text(size = 11),
+        plot.title = element_text(hjust = 0.5, face = "bold")) +
+  labs(size = expression(chi^2 ~ "Significance"))
+
+# Calculate growth recovery promoting factors dataframe
+Misame_3_risk_reduction = rbind(
+  get_risk_scores(misame_df_3vs5 %>% mutate(Outcome = DVSEASON=="Rainy Season"), "group3", "Outcome", "Rainy season\ndelivery"),
+ get_risk_scores(misame_df_3vs5 %>% mutate(Outcome = MHTCM_Enroll>=155), "group3", "Outcome", "MHTCM≥155cm"),
+ get_risk_scores(misame_df_3vs5 %>% mutate(Outcome = MMUACCM_Enroll>=23), "group3", "Outcome", "MMUAC≥23cm\n(Enrollment)"),
+  get_risk_scores(misame_df_3vs5, "group3", "Postnatal_BEP", "Postnatal BEP")) %>%
+  # get_risk_scores(misame_df_3vs5, "group3", "Prenatal_BEP", "Prenatal BEP")) %>%
+  mutate(Condition = "Growth recovery", Study = "Misame",
+    Size = factor(case_when(
+      Chisq.P < 0.001 ~ "p<0.001",   # Strongest significance
+      Chisq.P < 0.01  ~ "p<0.01",   # Moderate significance
+      Chisq.P < 0.05  ~ "p<0.05",   # Weak significance
+      TRUE      ~ "ns"), levels= c("ns", "p<0.05", "p<0.01", "p<0.001")))
+
+# Generate growth recovery promoting factors plot
+riskplotM2 = ggplot(Misame_3_risk_reduction, aes(x = Risk_ratio, y = Outcome, size = Size)) +
+  ggstance::geom_pointrangeh(aes(xmin = CI_lower, xmax = CI_upper), color = "#50C878", fatten = 3) +
+  geom_vline(xintercept = 1, linetype = "dashed") +
+  labs(x = "Risk Ratio", y = NULL) +
+  ggtitle("MISAME Growth Recovery\nPromoting Factors") +
+  theme_bw(base_size = 13) +
+  scale_size_manual(values = c('ns' = 0.2, 'p<0.05'=0.4, 'p<0.01'=0.6,
+                               'p<0.001'=0.8)) +
+  scale_y_discrete(drop = FALSE) +
+  coord_cartesian(xlim = c(0, 10)) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        strip.background = element_rect(fill = "grey85"),
+        legend.title = element_text(size = 11),
+        plot.title = element_text(hjust = 0.5, face = "bold")) +
+  labs(size = expression(chi^2 ~ "Significance"))
+
+# Combine plots
+Figure2C = ggarrange(riskplotM1, riskplotM2, ncol = 1, heights = c(1.2,1))
+Figure2C
+ggsave(filename = paste0(fig_path, "/Figure2C.pdf"), 
+       plot = Figure2C,
+       width = 4, height = 6, dpi = 600)
+
+```
+
+## Figure 2D
+``` {r}
+# Initial data processing 
+vital_df = vital_full_meta %>% dplyr::select(-SampleID, -VISIT, -Timepoint, -AGEDAYS) %>% unique() 
+vital_df_4_vs_all = vital_df %>% mutate(group4=WAZ_traj==4)
+vital_df_stable = vital_df %>% mutate(stable=WAZ_traj!=4)
+
+# Calculate risk for developing adverse growth trajectory 
+Vital_4_risk = rbind(
+  get_risk_scores(vital_df_4_vs_all, "group4", "Premature", "Prematurity"),
+  get_risk_scores(vital_df_4_vs_all, "group4", "Low_birth_weight", "Low birth weight"),
+  get_risk_scores(vital_df_4_vs_all, "group4", "MHTCM_binary_bins", "MHTCM<155cm"),
+  get_risk_scores(vital_df_4_vs_all %>% mutate(Outcome = MMUACCM_Baseline<21), "group4", "Outcome", "MMUAC<21cm\n(Enrollment)")) %>%
+  mutate(Condition = "Growth perturbation", Study = "Vital",
+    Size = factor(case_when(
+      Chisq.P < 0.001 ~ "p<0.001",   # Strongest significance
+      Chisq.P < 0.01  ~ "p<0.01",   # Moderate significance
+      Chisq.P < 0.05  ~ "p<0.05",   # Weak significance
+      TRUE      ~ "ns"), levels= c("ns", "p<0.05", "p<0.01", "p<0.001")))
+
+# Generate top plot
+riskplotV1 = ggplot(Vital_4_risk, aes(x = Risk_ratio, y = Outcome, 
+                                     size = Size)) +
+  ggstance::geom_pointrangeh(aes(xmin = CI_lower, xmax = CI_upper), color = "#EE4B2B", fatten = 3) +
+  geom_vline(xintercept = 1, linetype = "dashed") +
+  scale_size_manual(values = c('ns' = 0.2, 'p<0.05'=0.4, 'p<0.01'=0.6,
+                               'p<0.001'=0.8)) +
+  labs(x = "Risk Ratio", y = NULL) +
+  ggtitle("Mumta-LW Growth Perturbation\nRisk Factors") +
+  theme_bw(base_size = 13) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        strip.background = element_rect(fill = "grey85"),
+        legend.title = element_text(size = 11),
+        plot.title = element_text(hjust = 0.5, face = "bold")) +
+  labs(size = expression(chi^2 ~ "Significance"))
+
+# Calculate risk reduction for developing adverse growth trajectory
+Vital_4_risk_reduction = rbind(
+  get_risk_scores(vital_df_stable, "stable", "BEP", "Postnatal BEP"),
+  get_risk_scores(vital_df_stable, "stable", "Azithromycin", "Azithromycin"),
+  get_risk_scores(vital_df_stable %>% mutate(Outcome = DVSEASON=="Winter"), "stable", "Outcome", "  Winter delivery")) %>%
+  mutate(Condition = "Stable growth", Study = "Vital",
+    Size = factor(case_when(
+      Chisq.P < 0.001 ~ "p<0.001",   # Strongest significance
+      Chisq.P < 0.01  ~ "p<0.01",   # Moderate significance
+      Chisq.P < 0.05  ~ "p<0.05",   # Weak significance
+      TRUE      ~ "ns"), levels= c("ns", "p<0.05", "p<0.01", "p<0.001")))
+
+# Generate bottom plot
+riskplotV2 = ggplot(Vital_4_risk_reduction, aes(x = Risk_ratio, y = Outcome,
+                                               size = Size)) +
+  ggstance::geom_pointrangeh(aes(xmin = CI_lower, xmax = CI_upper), color = "#50C878", fatten = 3) +
+  scale_size_manual(values = c('ns' = 0.2, 'p<0.05'=0.4, 'p<0.01'=0.6,
+                               'p<0.001'=0.8)) +
+  geom_vline(xintercept = 1, linetype = "dashed") +
+  labs(x = "Risk Ratio", y=NULL) +
+  ggtitle("Mumta-LW Growth Stability\nPromoting Factors") +
+  theme_bw(base_size = 13) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        strip.background = element_rect(fill = "grey85"),
+        legend.title = element_text(size = 11),
+        plot.title = element_text(hjust = 0.5, face = "bold")) +
+  labs(size = expression(chi^2 ~ "Significance"))
+
+# Arrange plots
+Figure2D = ggarrange(riskplotV1, riskplotV2, ncol = 1, heights = c(1.2,1))
+Figure2D
+ggsave(filename = paste0(fig_path, "/Figure2D.pdf"), 
+       plot = Figure2D,
+       width = 4, height = 6, dpi = 600)
+```
+

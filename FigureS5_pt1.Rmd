@@ -1,0 +1,319 @@
+---
+title: "Figure S5AC. Joint-RPCA analysis reveals strong link between acylcarnitines and joint growth-supplementation signal"
+---
+
+```{r setup, include=FALSE}
+# Show code if file is knit 
+knitr::opts_chunk$set(echo = TRUE)
+
+# Sets working directory to file location
+library(rstudioapi)
+if (interactive() && rstudioapi::isAvailable()) { 
+  rootdir = dirname(rstudioapi::getSourceEditorContext()$path) 
+  setwd(dirname(rstudioapi::getSourceEditorContext()$path)) 
+}
+```
+
+# Load data, libraries, functions
+``` {r}
+# Load libraries and data 
+source("plotting_setup.R")
+# Load functions
+source("plotting_functions.R")
+```
+
+##Figure S5A
+``` {r}
+# Function for hypergeometric enrichment
+hypergeom_enrichment_v1 = function(ingroup, outgroup, interest_feats, epsilon = 1e-10) {
+  pop = unique(c(ingroup,outgroup))
+    
+  successes_in_sample = length(ingroup[ingroup %in% interest_feats])
+  sample_size = length(ingroup)
+  
+  successes_in_pop = length(pop[pop %in% interest_feats])
+  failiures_in_pop = length(pop[!pop %in% interest_feats])
+    
+  p = phyper(successes_in_sample-1, successes_in_pop, failiures_in_pop, sample_size, lower.tail = FALSE)
+  interest_perc = successes_in_sample/sample_size
+  noninterest_perc = successes_in_pop/(successes_in_pop+failiures_in_pop)
+
+  enrich_label = ifelse(successes_in_sample == 0, "absent",
+                        ifelse(interest_perc > noninterest_perc, "enrichment", "depletion"))
+  Fold_enrichment = interest_perc/noninterest_perc
+  
+  if (length(ingroup[ingroup %in% interest_feats])==0) {p=NA}
+  return(c(p, enrich_label, Fold_enrichment))
+}
+
+# Define metab categories
+Metab_cat_list = list()
+Metab_cat_list[["HMO"]] = targeted_spec %>% filter(VarCategory=="HMO") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Mineral"]] = targeted_spec %>% filter(VarCategory=="Mineral") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Vitamins"]] = targeted_spec %>% filter(VarCategory %in% c("FSV vitamins", "B vitamins")) %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Amino Acid Related"]] = targeted_spec %>% filter(VarSubCategory=="Amino Acid Related") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Indoles and Derivatives"]] = targeted_spec %>% filter(VarSubCategory=="Indoles and Derivatives") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Fatty Acids"]] = targeted_spec %>% filter(VarSubCategory=="Fatty Acids") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Carboxylic Acids"]] = targeted_spec %>% filter(VarSubCategory=="Carboxylic Acids") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Amino Acids"]] = targeted_spec %>% filter(VarSubCategory=="Amino Acids") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Biogenic Amines"]] = targeted_spec %>% filter(VarSubCategory=="Biogenic Amines") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Acylcarnitines"]] = targeted_spec %>% filter(VarSubCategory=="Acylcarnitines") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Bile Acids"]] = targeted_spec %>% filter(VarSubCategory=="Bile Acids") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Cholesteryl Esters"]] = targeted_spec %>% filter(VarSubCategory=="Cholesteryl Esters") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Ceramides"]] = targeted_spec %>% filter(VarSubCategory=="Ceramides") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Dihydroceramides"]] = targeted_spec %>% filter(VarSubCategory=="Dihydroceramides") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Diglycerides"]] = targeted_spec %>% filter(VarSubCategory=="Diglycerides") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Carbohydrates and Related"]] = targeted_spec %>% filter(VarSubCategory=="Carbohydrates and Related") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Dihexosylceramides"]] = targeted_spec %>% filter(VarSubCategory=="Dihexosylceramides") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Trihexosylceramides"]] = targeted_spec %>% filter(VarSubCategory=="Trihexosylceramides") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Nucleobases and Related"]] = targeted_spec %>% filter(VarSubCategory=="Nucleobases and Related") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Lysophosphatidylcholines"]] = targeted_spec %>% filter(VarSubCategory=="Lysophosphatidylcholines") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Cresols"]] = targeted_spec %>% filter(VarSubCategory=="Cresols") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Phosphatidylcholines"]] = targeted_spec %>% filter(VarSubCategory=="Phosphatidylcholines") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Sphingomyelins"]] = targeted_spec %>% filter(VarSubCategory=="Sphingomyelins") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Triglycerides"]] = targeted_spec %>% filter(VarSubCategory=="Triglycerides") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Amine Oxides"]] = targeted_spec %>% filter(VarSubCategory=="Amine Oxides") %>% pull(VarName) %>% make.names()
+Metab_cat_list[["Alkaloids"]] = targeted_spec %>% filter(VarSubCategory=="Alkaloids") %>% pull(VarName) %>% make.names()
+
+# Preprocess Joint-RPCA ranked feature data
+Misame_RPCA_bioc_Denom = Misame_ord_biocrates %>% filter(Log_Ratio=="Yes", Log_Ratio_Annot=="Denom") %>% rownames()
+
+Misame_RPCA_hypergeom_df_Denom = data.frame(pathway=character(), p=numeric(), enrich=character(), log_enrich=numeric())
+for (each_cat in names(Metab_cat_list)) {
+  enrich_feats = rownames(Misame_ord_biocrates)[rownames(Misame_ord_biocrates) %in% Metab_cat_list[[each_cat]]]
+  if (length(enrich_feats)>2) {
+    hypergeom_res = hypergeom_enrichment_v1(Misame_RPCA_bioc_Denom,
+                   rownames(Misame_ord_biocrates)[!rownames(Misame_ord_biocrates) %in% Misame_RPCA_bioc_Denom],
+                   enrich_feats)
+    Misame_RPCA_hypergeom_df_Denom = rbind(Misame_RPCA_hypergeom_df_Denom, data.frame(pathway=each_cat, p=hypergeom_res[1],
+                                                    enrich=hypergeom_res[2], fold_enrich=hypergeom_res[3]))
+  }
+}
+Mis_RPCA_hypergeom_df_toplot_Denom = Misame_RPCA_hypergeom_df_Denom %>%
+  mutate(p.adjust = p.adjust(as.numeric(p), method = "BH")) %>%
+  arrange(desc(as.numeric(fold_enrich))) %>%
+  filter(!is.na(p)) %>%
+  arrange(desc(row_number())) %>%
+  mutate(pathway = factor((pathway), levels = (pathway)),
+         level = as.numeric(factor(pathway)),
+         xmin = ifelse(fold_enrich > 1, 1, fold_enrich),
+         xmax = ifelse(fold_enrich >1, fold_enrich, 1))
+
+Vital_RPCA_bioc_Denom = Vital_ord_biocrates %>% filter(Log_Ratio=="Yes", Log_Ratio_Annot=="Denom") %>% rownames()
+
+Vital_RPCA_hypergeom_df_Denom = data.frame(pathway=character(), p=numeric(), enrich=character(), log_enrich=numeric())
+for (each_cat in names(Metab_cat_list)) {
+  enrich_feats = rownames(Vital_ord_biocrates)[rownames(Vital_ord_biocrates) %in% Metab_cat_list[[each_cat]]]
+  if (length(enrich_feats)>2) {
+    hypergeom_res = hypergeom_enrichment_v1(Vital_RPCA_bioc_Denom,
+                   rownames(Vital_ord_biocrates)[!rownames(Vital_ord_biocrates) %in% Vital_RPCA_bioc_Denom],
+                   enrich_feats)
+    Vital_RPCA_hypergeom_df_Denom = rbind(Vital_RPCA_hypergeom_df_Denom, data.frame(pathway=each_cat, p=hypergeom_res[1],
+                                                    enrich=hypergeom_res[2], fold_enrich=hypergeom_res[3]))
+  }
+}
+Vit_RPCA_hypergeom_df_toplot_Denom = Vital_RPCA_hypergeom_df_Denom %>%
+  mutate(p.adjust = p.adjust(as.numeric(p), method = "BH")) %>%
+  arrange(desc(as.numeric(fold_enrich))) %>%
+  filter(!is.na(p)) %>%
+  arrange(desc(row_number())) %>%
+  mutate(pathway = factor((pathway), levels = (pathway)),
+         level = as.numeric(factor(pathway)),
+         xmin = ifelse(fold_enrich > 1, 1, fold_enrich),
+         xmax = ifelse(fold_enrich >1, fold_enrich, 1))
+
+# Plot rankings
+RPCA_enrich_plot = ggarrange(
+  ggplot(Mis_RPCA_hypergeom_df_toplot_Denom) +
+  geom_rect(aes(ymin = level - 0.4,
+                ymax = level + 0.4,
+                xmin = as.numeric(xmin),
+                xmax = as.numeric(xmax),
+                color = enrich,
+                fill = ifelse(as.numeric(p) < 0.05,
+                          ifelse(as.numeric(fold_enrich)>0, "blue", "red"), FALSE))) +
+  geom_text(
+    data = subset(Mis_RPCA_hypergeom_df_toplot_Denom, as.numeric(p) < 0.05 & as.numeric(fold_enrich) > 0),
+    aes(x = 1,
+        y = level,
+        label = paste("p =", signif(as.numeric(p), 3))),
+    vjust = 0.5,
+    hjust = -0.1,
+    color = "black"
+  ) +
+  geom_text(
+    data = subset(Mis_RPCA_hypergeom_df_toplot_Denom, as.numeric(p) < 0.05 & as.numeric(fold_enrich) < 0),
+    aes(x = 1,
+        y = level,
+        label = paste("p =", signif(as.numeric(p), 3))),
+    vjust = 0.5,
+    hjust = 1.05,
+    color = "black"
+  ) +
+  scale_y_continuous(breaks = 1:length(unique(Mis_RPCA_hypergeom_df_toplot_Denom$pathway)), 
+                     labels = Mis_RPCA_hypergeom_df_toplot_Denom$pathway) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "black") +
+  xlab("Fold Enrichment") + theme_minimal() + 
+  theme(axis.text.y = element_text(size = 12),
+        axis.title.y = element_text(size = 12),
+        axis.text.x = element_text(size = 10),
+        axis.title.x = element_text(size = 12),
+        legend.position = "none") +
+  scale_fill_manual(values = c("blue" = "#00BFC4", red = "#F8766D", "FALSE" = "white")) + scale_color_manual(values = c("enrichment" = "#00BFC4", "depletion" = "#F8766D", "absent" = "gray")) +
+    scale_x_continuous(breaks = seq(min(Mis_RPCA_hypergeom_df_toplot_Denom$fold_enrich), max(Mis_RPCA_hypergeom_df_toplot_Denom$fold_enrich), by = 1)) +
+  ggtitle("Bottom Ranked MISAME PC1 Features"),
+
+  ggplot(Vit_RPCA_hypergeom_df_toplot_Denom) +
+  geom_rect(aes(ymin = level - 0.4,
+                ymax = level + 0.4,
+                xmin = as.numeric(xmin),
+                xmax = as.numeric(xmax),
+                color = enrich,
+                fill = ifelse(as.numeric(p) < 0.05,
+                          ifelse(as.numeric(fold_enrich)>0, "blue", "red"), FALSE))) +
+  geom_text(
+    data = subset(Vit_RPCA_hypergeom_df_toplot_Denom, as.numeric(p) < 0.05 & as.numeric(fold_enrich) > 0),
+    aes(x = 1,
+        y = level,
+        label = paste("p =", signif(as.numeric(p), 3))),
+    vjust = 0.5,
+    hjust = -0.1,
+    color = "black"
+  ) +
+  geom_text(
+    data = subset(Vit_RPCA_hypergeom_df_toplot_Denom, as.numeric(p) < 0.05 & as.numeric(fold_enrich) < 0),
+    aes(x = 1,
+        y = level,
+        label = paste("p =", signif(as.numeric(p), 3))),
+    vjust = 0.5,
+    hjust = 1.05,
+    color = "black"
+  ) +
+  scale_y_continuous(breaks = 1:length(unique(Vit_RPCA_hypergeom_df_toplot_Denom$pathway)), 
+                     labels = Vit_RPCA_hypergeom_df_toplot_Denom$pathway) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "black") +
+  xlab("Fold Enrichment") + theme_minimal() + 
+  theme(axis.text.y = element_text(size = 12),
+        axis.title.y = element_text(size = 12),
+        axis.text.x = element_text(size = 10),
+        axis.title.x = element_text(size = 12),
+        legend.position = "none") +
+  scale_fill_manual(values = c("blue" = "#00BFC4", red = "#F8766D", "FALSE" = "white")) + scale_color_manual(values = c("enrichment" = "#00BFC4", "depletion" = "#F8766D", "absent" = "gray")) +
+    scale_x_continuous(breaks = seq(min(Vit_RPCA_hypergeom_df_toplot_Denom$fold_enrich), max(Vit_RPCA_hypergeom_df_toplot_Denom$fold_enrich), by = 1)) +
+  ggtitle("Bottom Ranked VITAL PC1 Features")
+  )
+
+RPCA_enrich_plot
+ggexport(filename = paste0(fig_path, "/FigureS5A.pdf"), plot = RPCA_enrich_plot,
+        width = 10.2, height = 4.8)
+```
+
+## Figure S5C
+``` {r}
+Misame_everything=Misame_everything %>% mutate(BEPyn=ifelse(Postnatal_BEP==TRUE, "Y", "N"))
+Vital_everything=Vital_everything %>% mutate(BEPyn=ifelse(Postnatal_BEP==TRUE, "Y", "N"))
+
+FigureS5C = ggarrange(
+  ggarrange(
+  Misame_everything %>% filter(Timepoint==1) %>% mutate(Label="14-21D") %>%
+    ggplot(aes(x=BEPyn, y=C3, fill=Postnatal_BEP)) + geom_boxplot(show.legend = FALSE) + facet_grid(.~Label) + 
+      stat_compare_means(comparisons = list(c("Y", "N")), 
+                       method = "wilcox", label = "p.signif",
+                       label.y = 2.5) + ylim(0,3) +
+    ggtitle("MISAME") + xlab("Postnatal BEP") + theme_minimal(),
+  Misame_everything %>% filter(Timepoint==2) %>%  mutate(Label="1-2M") %>%
+    ggplot(aes(x=BEPyn, y=C3, fill=Postnatal_BEP)) + ylab(NULL) + geom_boxplot(show.legend = FALSE) + facet_grid(.~Label) + 
+      stat_compare_means(comparisons = list(c("Y", "N")), 
+                       method = "wilcox", label = "p.signif",
+                       label.y = 2.5) + ylim(0,3) +
+    ggtitle("") + xlab("Postnatal BEP") + theme_minimal(),
+  Misame_everything %>% filter(Timepoint==3) %>% mutate(Label="3-4M") %>%
+    ggplot(aes(x=BEPyn, y=C3, fill=Postnatal_BEP)) + ylab(NULL) + geom_boxplot(show.legend = FALSE) + facet_grid(.~Label) + 
+      stat_compare_means(comparisons = list(c("Y", "N")), 
+                       method = "wilcox", label = "p.signif",
+                       label.y = 2.5) + ylim(0,3) +
+    ggtitle("") + xlab("Postnatal BEP") + theme_minimal(),
+  Vital_everything %>% filter(Timepoint==1) %>% mutate(Label="42D") %>%
+    ggplot(aes(x=BEPyn, y=C3, fill=Postnatal_BEP)) + ylab(NULL) + geom_boxplot(show.legend = FALSE) + facet_grid(.~Label) + 
+      stat_compare_means(comparisons = list(c("Y", "N")), 
+                       method = "wilcox", label = "p.signif",
+                       label.y = 2.5) + ylim(0,3) +
+    ggtitle("VITAL") + xlab("Postnatal BEP") + theme_minimal(),
+  Vital_everything %>% filter(Timepoint==2) %>% mutate(Label="56D") %>%
+    ggplot(aes(x=BEPyn, y=C3, fill=Postnatal_BEP)) + ylab(NULL) + geom_boxplot(show.legend = FALSE) + facet_grid(.~Label) + 
+      stat_compare_means(comparisons = list(c("Y", "N")), 
+                       method = "wilcox", label = "p.signif",
+                       label.y = 2.5) + ylim(0,3) +
+    ggtitle("") + xlab("Postnatal BEP") + theme_minimal(),
+  nrow=1),
+  ggarrange(
+    Misame_everything %>% filter(Timepoint==1) %>% mutate(Label="14-21D") %>%
+      ggplot(aes(x=BEPyn, y=C4, fill=Postnatal_BEP)) + geom_boxplot(show.legend = FALSE) + facet_grid(.~Label) + 
+      stat_compare_means(comparisons = list(c("Y", "N")), 
+                         method = "wilcox", label = "p.signif",
+                       label.y = 3.5) + ylim(0,4) +
+      ggtitle("MISAME") + xlab("Postnatal BEP") + theme_minimal(),
+    Misame_everything %>% filter(Timepoint==2) %>%  mutate(Label="1-2M") %>%
+      ggplot(aes(x=BEPyn, y=C4, fill=Postnatal_BEP)) + ylab(NULL) + geom_boxplot(show.legend = FALSE) + facet_grid(.~Label) + 
+      stat_compare_means(comparisons = list(c("Y", "N")), 
+                         method = "wilcox", label = "p.signif",
+                       label.y = 3.5) + ylim(0,4) +
+      ggtitle("") + xlab("Postnatal BEP") + theme_minimal(),
+    Misame_everything %>% filter(Timepoint==3) %>% mutate(Label="3-4M") %>%
+      ggplot(aes(x=BEPyn, y=C4, fill=Postnatal_BEP)) + ylab(NULL) + geom_boxplot(show.legend = FALSE) + facet_grid(.~Label) + 
+      stat_compare_means(comparisons = list(c("Y", "N")), 
+                         method = "wilcox", label = "p.signif",
+                       label.y = 3.5) + ylim(0,4) +
+      ggtitle("") + xlab("Postnatal BEP") + theme_minimal(),
+    Vital_everything %>% filter(Timepoint==1) %>% mutate(Label="42D") %>%
+      ggplot(aes(x=BEPyn, y=C4, fill=Postnatal_BEP)) + ylab(NULL) + geom_boxplot(show.legend = FALSE) + facet_grid(.~Label) + 
+      stat_compare_means(comparisons = list(c("Y", "N")), 
+                         method = "wilcox", label = "p.signif",
+                       label.y = 3.5) + ylim(0,4) +
+      ggtitle("VITAL") + xlab("Postnatal BEP") + theme_minimal(),
+    Vital_everything %>% filter(Timepoint==2) %>% mutate(Label="56D") %>%
+      ggplot(aes(x=BEPyn, y=C4, fill=Postnatal_BEP)) + ylab(NULL) + geom_boxplot(show.legend = FALSE) + facet_grid(.~Label) + 
+      stat_compare_means(comparisons = list(c("Y", "N")), 
+                         method = "wilcox", label = "p.signif",
+                       label.y = 3.5) + ylim(0,4) +
+      ggtitle("") + xlab("Postnatal BEP") + theme_minimal(),
+    nrow=1),
+  ggarrange(
+  Misame_everything %>% filter(Timepoint==1) %>% mutate(Label="14-21D") %>%
+    ggplot(aes(x=BEPyn, y=C5, fill=Postnatal_BEP)) + geom_boxplot(show.legend = FALSE) + facet_grid(.~Label) + 
+    stat_compare_means(comparisons = list(c("Y", "N")), 
+                       method = "wilcox", label = "p.signif",
+                       label.y = 3.5) + ylim(0,4) +
+    ggtitle("MISAME") + xlab("Postnatal BEP") + theme_minimal(),
+  Misame_everything %>% filter(Timepoint==2) %>%  mutate(Label="1-2M") %>%
+    ggplot(aes(x=BEPyn, y=C5, fill=Postnatal_BEP)) + geom_boxplot(show.legend = FALSE) + facet_grid(.~Label) + 
+    stat_compare_means(comparisons = list(c("Y", "N")), 
+                       method = "wilcox", label = "p.signif",
+                       label.y = 1.25) + ylim(0,1.5) +
+    ggtitle("") + xlab("Postnatal BEP") + theme_minimal(),
+  Misame_everything %>% filter(Timepoint==3) %>% mutate(Label="3-4M") %>%
+    ggplot(aes(x=BEPyn, y=C5, fill=Postnatal_BEP)) + geom_boxplot(show.legend = FALSE) + facet_grid(.~Label) + 
+    stat_compare_means(comparisons = list(c("Y", "N")), 
+                       method = "wilcox", label = "p.signif",
+                       label.y =1.25) + ylim(0,1.5) +
+    ggtitle("") + xlab("Postnatal BEP") + theme_minimal(),
+  Vital_everything %>% filter(Timepoint==1) %>% mutate(Label="42D") %>%
+    ggplot(aes(x=BEPyn, y=C5, fill=Postnatal_BEP)) + geom_boxplot(show.legend = FALSE) + facet_grid(.~Label) + 
+    stat_compare_means(comparisons = list(c("Y", "N")), 
+                       method = "wilcox", label = "p.signif",
+                       label.y = 0.8) + ylim(0,1.2) +
+    ggtitle("VITAL") + xlab("Postnatal BEP") + theme_minimal(),
+  Vital_everything %>% filter(Timepoint==2) %>% mutate(Label="56D") %>%
+    ggplot(aes(x=BEPyn, y=C5, fill=Postnatal_BEP)) + geom_boxplot(show.legend = FALSE) + facet_grid(.~Label) + 
+    stat_compare_means(comparisons = list(c("Y", "N")), 
+                       method = "wilcox", label = "p.signif",
+                       label.y = 0.8) + ylim(0,1) +
+    ggtitle("") + xlab("Postnatal BEP") + theme_minimal(),
+  nrow=1), ncol = 1)
+FigureS5C
+
+ggexport(FigureS5C, filename=paste0(fig_path, "/FigureS5C.pdf"),
+         width=7.65, height=9)
+```
+
+

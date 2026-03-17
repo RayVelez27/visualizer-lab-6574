@@ -1,0 +1,312 @@
+---
+title: "Figure S6A-C. Additional associations between metabolite biomarkers and indicators of mammary gland dysfunction"
+---
+
+```{r setup, include=FALSE}
+# Show code if file is knit 
+knitr::opts_chunk$set(echo = TRUE)
+
+# Sets working directory to file location
+library(rstudioapi)
+if (interactive() && rstudioapi::isAvailable()) { 
+  rootdir = dirname(rstudioapi::getSourceEditorContext()$path) 
+  setwd(dirname(rstudioapi::getSourceEditorContext()$path)) 
+}
+```
+
+# Load data, libraries, functions
+``` {r}
+# Load libraries and data 
+source("plotting_setup.R")
+# Load functions
+source("plotting_functions.R")
+```
+# Load additional data
+``` {r}
+# Load Figure 4-specific data 
+enrichment_df_path = "C://Users/ETTINA03/NYU Langone Health Dropbox/April Jauhal/Shenhav_Lab/Databases/Tissue_Atlas/processed_tissue_enrichment.csv"
+enrichment_df = read.csv(enrichment_df_path, row.names = 1)
+enrichment_df_filt = enrichment_df %>% filter(p_val_perc_adjust < 0.05)
+Breast_glandular_expr_genes = enrichment_df_filt %>% filter(Top_cell_type=="Breast glandular cells") %>% pull(Gene.name)
+Breast_myoepitheilal_expr_genes = enrichment_df_filt %>% filter(Top_cell_type=="Breast myoepithelial cells") %>% pull(Gene.name)
+Immune_cell_types = c("B-cells", "Hofbauer cells", "Macrophages", "monocytes", "dendritic cells", "NK-cells", "Plasma cells", "granulocytes", "Kupffer cells", "Langerhans cells", "T-cells") 
+Immune_expr_genes = enrichment_df_filt %>% filter(Top_cell_type %in% Immune_cell_types) %>% pull(Gene.name)
+IG_genes = read.delim("C:/Users/ETTINA03/NYU Langone Health Dropbox/April Jauhal/Shenhav_Lab/Databases/Tissue_Atlas/Secretome/protein_class_Immunoglobulin.tsv") %>% pull(Gene)
+blood_secrete_genes = read.delim("C:/Users/ETTINA03/NYU Langone Health Dropbox/April Jauhal/Shenhav_Lab/Databases/Tissue_Atlas/Secretome/sa_location_Secreted_to_blood.tsv") %>% pull(Gene)
+female_secrete_genes = read.delim("C:/Users/ETTINA03/NYU Langone Health Dropbox/April Jauhal/Shenhav_Lab/Databases/Tissue_Atlas/Secretome/sa_location_Secreted_to_female-reproductive-system.tsv") %>% pull(Gene)
+ECM_secrete_genes = read.delim("C:/Users/ETTINA03/NYU Langone Health Dropbox/April Jauhal/Shenhav_Lab/Databases/Tissue_Atlas/Secretome/sa_location_Secreted_to_ECM.tsv") %>% pull(Gene)
+Tissue_atlas = read.delim("C://Users/ETTINA03/NYU Langone Health Dropbox/April Jauhal/Shenhav_Lab/MOMI/Metabolomics_working_dir/Data/Tissue_Atlas/rna_single_cell_type.tsv")
+```
+#Figure 6SA
+``` {r}
+# Set metabolites
+MG_heatmap_key = list("Sia"="Sialylated HMOs",
+                        "Se"="Selenium",
+                        "C5" = "Valerylcarnitine (C5)",
+                        "C4" = "Butyrylcarnitine (C4)",
+                        "C3" = "Propionylcarnitine (C3)",
+                        "X6.SL" = "6'-Sialyllactose",
+                        "Lys" = "Lysine")
+metab_feats = names(MG_heatmap_key)
+
+# Identify ECM-specific genes for MISAME
+mis_ECM_focus_genes = ECM_secrete_genes[ECM_secrete_genes %in% colnames(misame_proteomics_filt_genes)]
+mis_ecm_celltypes = left_join(
+  Tissue_atlas %>% filter(Cell.type=="Breast glandular cells",
+                          Gene.name %in% mis_ECM_focus_genes) %>%
+    dplyr::select(Gene.name, nTPM) %>%
+    dplyr::rename("Breast Glandular Cell (nTPM)"='nTPM'),
+  Tissue_atlas %>% filter(Cell.type=="Breast myoepithelial cells",
+                          Gene.name %in% mis_ECM_focus_genes) %>%
+    dplyr::select(Gene.name, nTPM) %>%
+    dplyr::rename("Breast Myoepithelial Cell (nTPM)"='nTPM')) %>%
+  mutate(max = pmax(`Breast Glandular Cell (nTPM)`, `Breast Myoepithelial Cell (nTPM)`)) %>%
+  #arrange(desc(max))
+  arrange(desc(`Breast Myoepithelial Cell (nTPM)`)) %>% 
+  filter(`Breast Myoepithelial Cell (nTPM)` > 5)
+
+# Identify ECM-specific genes for Vital
+vit_ECM_focus_genes = ECM_secrete_genes[ECM_secrete_genes %in% colnames(vital_proteomics_filt_genes)]
+vit_ecm_celltypes = left_join(
+  Tissue_atlas %>% filter(Cell.type=="Breast glandular cells",
+                          Gene.name %in% vit_ECM_focus_genes) %>%
+    dplyr::select(Gene.name, nTPM) %>%
+    dplyr::rename("Breast Glandular Cell (nTPM)"='nTPM'),
+  Tissue_atlas %>% filter(Cell.type=="Breast myoepithelial cells",
+                          Gene.name %in% vit_ECM_focus_genes) %>%
+    dplyr::select(Gene.name, nTPM) %>%
+    dplyr::rename("Breast Myoepithelial Cell (nTPM)"='nTPM')) %>%
+  mutate(max = pmax(`Breast Glandular Cell (nTPM)`, `Breast Myoepithelial Cell (nTPM)`)) %>%
+  #arrange(desc(max))
+  arrange(desc(`Breast Myoepithelial Cell (nTPM)`)) %>% 
+  filter(`Breast Myoepithelial Cell (nTPM)` > 5)
+
+# Generating heatmap contents
+labels <- c("Misame", "Vital")
+ECM_contexts <- c("ECM")
+ECM_focus_genes_map <- list(
+  ECM  = list(mis = mis_ecm_celltypes$Gene.name, vit = vit_ecm_celltypes$Gene.name)
+)
+
+ECM_heat_list <- list()
+for (label in labels) {
+  for (context in ECM_contexts) {
+    focus_genes <- ECM_focus_genes_map[[context]][[tolower(substr(label, 1, 3))]]
+    ECM_heat_list[[paste(label, context)]] <- get_heatmap_correlations(
+      metab_feats = metab_feats,
+      focus_genes = focus_genes,
+      label = label,
+      include_H1 = (context == "Milk")
+    )
+  }
+}
+
+# Prepare Misame heatmap
+ECM_key_Misame = list("AGRN$" = "AGRN (Agrin)",
+                      "COL4A2$" = "COL4A2 (Collagen)",
+                      "TNC$" = "TNC (Tenascin C)",
+                      "PLOD3$" = "PLOD3 (Lysyl Hydroxylase 3)")
+Misame_ecm_matrix <- prepare_complete_heatmap_matrix(
+  label = "Misame",
+  heat_list = ECM_heat_list,
+  Protein_key = ECM_key_Misame,
+  proteomics_df = misame_proteomics_filt_genes,
+  everything_df = Misame_everything,
+  MSD_df = Mis_MSD,
+)
+Misame_ecm_Heatmap <- render_heatmap(
+  matrix_r = Misame_ecm_matrix$r,
+  matrix_p = Misame_ecm_matrix$p,
+  title = "MISAME",
+  colors = colorRamp2(seq(-1, 1, length.out = 100), colorRampPalette(c("purple", "white", "forestgreen"))(100))
+)
+
+# Prepare Vital heatmap
+ECM_key_Vital = list("AGRN$" = "AGRN (Agrin)",
+                      "COL3A1$" = "COL3A1 (Collagen)",
+                      "TNC$" = "TNC (Tenascin C)",
+                      "PLOD3$" = "PLOD3 (Lysyl Hydroxylase 3)")
+Vital_ecm_matrix <- prepare_complete_heatmap_matrix(
+  label = "Vital",
+  heat_list = ECM_heat_list,
+  Protein_key = ECM_key_Vital,
+  proteomics_df = vital_proteomics_filt_genes,
+  everything_df = Vital_everything,
+  MSD_df = Vit_MSD,
+)
+Vital_ecm_Heatmap <- render_heatmap(
+  matrix_r = Vital_ecm_matrix$r,
+  matrix_p = Vital_ecm_matrix$p,
+  title = "Mumta-LW",
+  colors = colorRamp2(seq(-1, 1, length.out = 100), colorRampPalette(c("purple", "white", "forestgreen"))(100))
+)
+
+FigureS6A = ggarrange(as.ggplot(Misame_ecm_Heatmap), as.ggplot(Vital_ecm_Heatmap))
+FigureS6A
+
+ggexport(FigureS6A, 
+         filename=paste0(fig_path, "/FigureS6A.pdf"),
+         width=10.2, height=6.2)
+
+```
+
+#Figure 6SB
+``` {r}
+library(GO.db)
+
+# Function to iteratively extract all children from a given GO term
+get_all_children_iterative <- function(go_id) {
+  go_children_list <- as.list(GOBPCHILDREN)  
+  
+  total_children <- character(0)   
+  queue <- go_id                   
+  
+  while (length(queue) > 0) {
+    current <- queue[1]            
+    queue <- queue[-1]             
+    
+    children <- go_children_list[[current]]
+    children <- children[names(children) %in% c("isa", "part of")]
+    
+    if (!is.null(children)) {
+      new_children <- setdiff(children, c(total_children, queue))
+      total_children <- unique(c(total_children, new_children))
+      queue <- c(queue, new_children)
+    }
+  }
+  
+  return(c(go_id, total_children[!is.na(total_children)]))
+}
+
+# Identify all descendants for the "mammary gland development" GO term
+MG_development_children <- get_all_children_iterative("GO:0030879")
+
+# Filter GO:0030979 descendants to extract GO terms containing the term "Mammary" 
+MG_development_mammary_children <- names(Term(MG_development_children)[str_detect(Term(MG_development_children), '[Mm]ammary')])
+
+# Identify subset of MG_development_mammary_children which are present proteomics datasets per study
+MG_Dev_proteins_misame = misame_protein_meta %>% 
+  filter(str_detect(Gene.ontology..biological.process., str_flatten(MG_development_mammary_children, collapse = '|'))) %>% 
+  pull(Gene.Name) %>% sort()
+MG_Dev_proteins_vital = vital_protein_meta %>% 
+  filter(str_detect(Gene.ontology..biological.process., str_flatten(MG_development_mammary_children, collapse = '|'))) %>% 
+  pull(Gene.Name) %>% sort()
+
+# Generating heatmap contents
+labels <- c("Misame", "Vital")
+Dev_contexts <- c("Dev")
+Dev_focus_genes_map <- list(
+  Dev  = list(mis = MG_Dev_proteins_misame, vit = MG_Dev_proteins_vital)
+)
+
+Dev_heat_list <- list()
+for (label in labels) {
+  for (context in Dev_contexts) {
+    focus_genes <- Dev_focus_genes_map[[context]][[tolower(substr(label, 1, 3))]]
+    Dev_heat_list[[paste(label, context)]] <- get_heatmap_correlations(
+      metab_feats = metab_feats,
+      focus_genes = focus_genes,
+      label = label,
+      include_H1 = (context == "Milk")
+    )
+  }
+}
+
+# Prepare mammary heatmap for MISAME
+Misame_dev_matrix <- prepare_complete_heatmap_matrix(
+  label = "Misame",
+  heat_list = Dev_heat_list,
+  Protein_key = list(),
+  proteomics_df = misame_proteomics_filt_genes,
+  everything_df = Misame_everything,
+  MSD_df = Mis_MSD,
+)
+Misame_dev_Heatmap <- render_heatmap(
+  matrix_r = Misame_dev_matrix$r,
+  matrix_p = Misame_dev_matrix$p,
+  title = "MISAME",
+  colors = colorRamp2(seq(-1, 1, length.out = 100), colorRampPalette(c("purple", "white", "forestgreen"))(100))
+)
+
+# Prepare mammary heatmap for VITAL
+Vital_dev_matrix <- prepare_complete_heatmap_matrix(
+  label = "Vital",
+  heat_list = Dev_heat_list,
+  Protein_key = list(),
+  proteomics_df = vital_proteomics_filt_genes,
+  everything_df = Vital_everything,
+  MSD_df = Vit_MSD,
+)
+Vital_dev_Heatmap <- render_heatmap(
+  matrix_r = Vital_dev_matrix$r,
+  matrix_p = Vital_dev_matrix$p,
+  title = "Mumta-LW",
+  colors = colorRamp2(seq(-1, 1, length.out = 100), colorRampPalette(c("purple", "white", "forestgreen"))(100))
+)
+
+Figure6SB = ggarrange(as.ggplot(Misame_dev_Heatmap), as.ggplot(Vital_dev_Heatmap))
+ggexport(Figure6SB, 
+         filename=paste0(fig_path, "/Figure6SB.pdf"),
+         width=8.4, height=3)
+```
+#Figure 6SC
+``` {r}
+# Preparing data for plotting using all Immunoglobin genes
+mis_IG_focus_genes = IG_genes[IG_genes %in% colnames(misame_proteomics_filt_genes)]
+vit_IG_focus_genes = IG_genes[IG_genes %in% colnames(misame_proteomics_filt_genes)]
+
+labels <- c("Misame", "Vital")
+Ig_contexts <- c("Ig")
+Ig_focus_genes_map <- list(
+  Ig  = list(mis = mis_IG_focus_genes, vit = vit_IG_focus_genes)
+)
+Ig_heat_list <- list()
+for (label in labels) {
+  for (context in Ig_contexts) {
+    focus_genes <- Ig_focus_genes_map[[context]][[tolower(substr(label, 1, 3))]]
+    Ig_heat_list[[paste(label, context)]] <- get_heatmap_correlations(
+      metab_feats = metab_feats,
+      focus_genes = focus_genes,
+      label = label,
+      include_H1 = (context == "Milk")
+    )
+  }
+}
+
+# Prepare IgG heatmap for MISAME
+Misame_Ig_matrix <- prepare_complete_heatmap_matrix(
+  label = "Misame",
+  heat_list = Ig_heat_list,
+  Protein_key = list(),
+  proteomics_df = misame_proteomics_filt_genes,
+  everything_df = Misame_everything,
+  MSD_df = Mis_MSD,
+)
+Misame_Ig_Heatmap <- render_heatmap(
+  matrix_r = Misame_Ig_matrix$r,
+  matrix_p = Misame_Ig_matrix$p,
+  title = "MISAME",
+  colors = colorRamp2(seq(-1, 1, length.out = 100), colorRampPalette(c("purple", "white", "forestgreen"))(100))
+)
+
+# Prepare IgG heatmap for VITAL
+Vital_Ig_matrix <- prepare_complete_heatmap_matrix(
+  label = "Vital",
+  heat_list = Ig_heat_list,
+  Protein_key = list(),
+  proteomics_df = vital_proteomics_filt_genes,
+  everything_df = Vital_everything,
+  MSD_df = Vit_MSD,
+)
+Vital_Ig_Heatmap <- render_heatmap(
+  matrix_r = Vital_Ig_matrix$r,
+  matrix_p = Vital_Ig_matrix$p,
+  title = "Mumta-LW",
+  colors = colorRamp2(seq(-1, 1, length.out = 100), colorRampPalette(c("purple", "white", "forestgreen"))(100))
+)
+
+Figure6SC = ggarrange(as.ggplot(Misame_Ig_Heatmap), as.ggplot(Vital_Ig_Heatmap), widths = c(1.1,1))
+ggexport(Figure6SC, 
+         filename=paste0(fig_path, "/Figure6SC.pdf"),
+         width=8, height=9.6)
+```

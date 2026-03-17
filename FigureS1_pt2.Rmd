@@ -1,0 +1,75 @@
+---
+title: "Figure S1B. Distinct HM Compositional Profiles Observed Across studies"
+---
+
+```{r setup, include=FALSE}
+# Show code if file is knit 
+knitr::opts_chunk$set(echo = TRUE)
+
+# Sets working directory to file location
+library(rstudioapi)
+if (interactive() && rstudioapi::isAvailable()) { 
+  rootdir = dirname(rstudioapi::getSourceEditorContext()$path) 
+  setwd(dirname(rstudioapi::getSourceEditorContext()$path)) 
+}
+```
+
+# Load data, libraries, functions
+``` {r}
+# Load libraries and data 
+source("plotting_setup.R")
+# Load functions
+source("plotting_functions.R")
+```
+
+## Figure S1b
+``` {r}
+# Load Site-specific Joint-RPCA data 
+site_dist_matrix = read.csv("C://Users/ETTINA03/NYU Langone Health Dropbox/April Jauhal/Shenhav_Lab/IMiC/Code/Joint-RPCA/output/Site_level_distance_matrix.csv", 
+                            row.names = 1, check.names = FALSE)
+site_JRPCA = read.csv("C://Users/ETTINA03/NYU Langone Health Dropbox/April Jauhal/Shenhav_Lab/IMiC/Code/Joint-RPCA/output/Site_level_PCA_output.csv", row.names = 1) %>%
+  filter(!is.na(PC1)) %>%
+  mutate(STUDYID = ifelse(STUDYID=="MISAME-3", "MISAME",
+                          ifelse(STUDYID=="VITAL-Lactation", "Mumta-LW",
+                                 ifelse(STUDYID=="CHILD", "CHILD", NA))))
+
+# Extract Ids
+MisameIDs = site_JRPCA %>% filter(!is.na(PC1), STUDYID=="MISAME") %>% rownames()
+VitalIDs = site_JRPCA %>% filter(!is.na(PC1), STUDYID=="Mumta-LW") %>% rownames()
+ChildIDs = site_JRPCA %>% filter(!is.na(PC1), STUDYID=="CHILD") %>% rownames()
+
+# Convert pairwise distances to tidy format
+Site_JRPCA_dist_pairwise = bind_rows(
+  site_dist_matrix[MisameIDs,MisameIDs] %>% as.matrix() %>% as.table() %>% 
+    as.data.frame() %>% mutate(Site="Self", Source="MISAME"),
+  site_dist_matrix[MisameIDs,VitalIDs] %>% as.matrix() %>% as.table() %>% 
+    as.data.frame() %>% mutate(Site="Other", Source="MISAME"),
+  site_dist_matrix[MisameIDs,ChildIDs] %>% as.matrix() %>% as.table() %>% 
+    as.data.frame() %>% mutate(Site="Other", Source="MISAME"),
+  site_dist_matrix[VitalIDs,MisameIDs] %>% as.matrix() %>% as.table() %>% 
+    as.data.frame() %>% mutate(Site="Other", Source="Mumta-LW"),
+  site_dist_matrix[VitalIDs,VitalIDs] %>% as.matrix() %>% as.table() %>% 
+    as.data.frame() %>% mutate(Site="Self", Source="Mumta-LW"),
+  site_dist_matrix[VitalIDs,ChildIDs] %>% as.matrix() %>% as.table() %>% 
+    as.data.frame() %>% mutate(Site="Other", Source="Mumta-LW"),
+  site_dist_matrix[ChildIDs,MisameIDs] %>% as.matrix() %>% as.table() %>% 
+    as.data.frame() %>% mutate(Site="Other", Source="CHILD"),
+  site_dist_matrix[ChildIDs,VitalIDs] %>% as.matrix() %>% as.table() %>% 
+    as.data.frame() %>% mutate(Site="Other", Source="CHILD"),
+  site_dist_matrix[ChildIDs,ChildIDs] %>% as.matrix() %>% as.table() %>% 
+    as.data.frame() %>% mutate(Site="Self", Source="CHILD")) %>%
+  mutate(Source = factor(Source, levels = c("MISAME", "Mumta-LW", "CHILD")))
+
+# Generate boxplot
+FigureS1B = Site_JRPCA_dist_pairwise %>% ggplot(aes(x=Site, y=Freq)) + 
+  geom_boxplot(aes(fill=Source)) + facet_grid(.~Source) + 
+  stat_compare_means(comparisons = list(c("Self", "Other"))) +
+  theme_minimal() + xlab("Comparison") + ylab("Pairwise Distance") +
+  scale_fill_manual(values = c("MISAME" = '#95aad3', 
+                               "Mumta-LW" = '#94c47d', 
+                               "CHILD" = '#edaeae')) +
+  theme(legend.position = 'none')
+
+ggexport(FigureS1B, filename=paste0(fig_path, "/FigureS1B.pdf"),
+         width=4.5, height=6)
+```
